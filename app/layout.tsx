@@ -6,6 +6,7 @@ import { ThemeProvider } from "@/providers/theme-provider"
 import { ClerkProvider } from "@clerk/nextjs";
 // import { AuthProvider } from "@/providers/auth-provider";
 import Footer from "@/components/footer";
+import { UmamiAnalytics } from "@/components/analytics/umami";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -60,6 +61,7 @@ export default function RootLayout({
             <Footer />
             {/* </AuthProvider> */}
           </ThemeProvider>
+          <UmamiAnalytics />
         </body>
       </html>
     </ClerkProvider>
