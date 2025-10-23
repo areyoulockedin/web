@@ -15,14 +15,10 @@ export async function GET(request: NextRequest) {
     let totalHeartbeatsReceived = 0;
 
     if (timeframeParam === 'weekly') {
-      // Get weekly aggregated data
-      const weekStart = new Date(timeframe);
-      weekStart.setHours(0, 0, 0, 0);
-      
       aggregatedData = await analyticsDb.weeklyStats.findMany({
         where: {
           weekStart: {
-            gte: weekStart,
+            gte: timeframe,
           },
         },
         include: {
@@ -41,14 +37,10 @@ export async function GET(request: NextRequest) {
 
       totalHeartbeatsReceived = aggregatedData.reduce((sum, stat) => sum + stat.heartbeats, 0);
     } else {
-      // Get daily aggregated data
-      const today = new Date(timeframe);
-      today.setHours(0, 0, 0, 0);
-      
       aggregatedData = await analyticsDb.dailyStats.findMany({
         where: {
           date: {
-            gte: today,
+            gte: timeframe,
           },
         },
         include: {
