@@ -15,15 +15,17 @@ export async function GET(request: NextRequest) {
     let totalHeartbeatsReceived = 0;
 
     if (timeframeParam === 'weekly') {
-      // Get weekly aggregated data
-      const weekStart = new Date(timeframe);
-      weekStart.setHours(0, 0, 0, 0);
+      // Get weekly aggregated data for current week only
+      const now = new Date();
+      const currentWeekStart = new Date(now);
+      const dayOfWeek = currentWeekStart.getDay();
+      const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      currentWeekStart.setDate(currentWeekStart.getDate() - daysToMonday);
+      currentWeekStart.setHours(0, 0, 0, 0);
       
       aggregatedData = await analyticsDb.weeklyStats.findMany({
         where: {
-          weekStart: {
-            gte: weekStart,
-          },
+          weekStart: currentWeekStart, // Exact match for current week
         },
         include: {
           user: {

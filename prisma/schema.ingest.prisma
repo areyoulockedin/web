@@ -38,3 +38,14 @@ model SessionCache {
   @@index([userId])
   @@index([expiresAt]) // For cleanup operations
 }
+
+// Ingestion checkpoint tracking - watermark-based system
+model IngestionCheckpoint {
+  id             Int      @id @default(autoincrement())
+  watermarkStart String   // ID from which ingestion began (first ActivityEvent ID in batch)
+  watermarkEnd   String   // ID up to which ingestion completed (last ActivityEvent ID in batch)
+  recordCount    Int      // Number of records processed in this batch
+  ingestedAt     DateTime @default(now()) // Timestamp when batch was successfully processed
+  
+  @@index([ingestedAt]) // For querying latest checkpoint
+}

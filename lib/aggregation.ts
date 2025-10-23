@@ -29,19 +29,27 @@ export async function aggregateActivityData() {
   console.log('Starting activity data aggregation...');
   
   try {
-    // Get events from the configured cutoff time to ensure we don't miss any
-    const cutoffTime = getCutoffTime();
     const ingestDb = await getIngestDb();
     
-    // Get all events that haven't been processed yet
-    const events = await ingestDb.activityEvent.findMany({
-      where: {
-        createdAt: {
-          gte: cutoffTime,
-        },
-      },
+    // Get the latest checkpoint to determine where to start processing
+    const latestCheckpoint = await ingestDb.ingestionCheckpoint.findFirst({
       orderBy: {
-        timestamp: 'asc',
+        ingestedAt: 'desc',
+      },
+    });
+
+    // Determine the starting point for this batch
+    const startId = latestCheckpoint ? latestCheckpoint.watermarkEnd : null;
+    
+    // Get all events that haven't been processed yet (using ID-based watermark)
+    const events = await ingestDb.activityEvent.findMany({
+      where: startId ? {
+        id: {
+          gt: startId,
+        },
+      } : {},
+      orderBy: {
+        id: 'asc',
       },
     });
 
@@ -50,7 +58,7 @@ export async function aggregateActivityData() {
       return;
     }
 
-    console.log(`Processing ${events.length} events`);
+    console.log(`Processing ${events.length} events from ${startId || 'beginning'}`);
 
     // Group events by user and date
     const dailyGroups = new Map<string, DailyAggregation>();
@@ -105,26 +113,49 @@ export async function aggregateActivityData() {
 
     // Write daily aggregations to AnalyticsDB
     for (const [key, daily] of dailyGroups) {
-      await analyticsDb.dailyStats.upsert({
+      // First, try to get existing record to merge languages properly
+      const existing = await analyticsDb.dailyStats.findUnique({
         where: {
           userId_date: {
             userId: daily.userId,
             date: new Date(daily.date),
           },
         },
-        create: {
-          userId: daily.userId,
-          date: new Date(daily.date),
-          totalTime: daily.totalTime,
-          languages: daily.languages,
-          heartbeats: daily.heartbeats,
-        },
-        update: {
-          totalTime: { increment: daily.totalTime },
-          languages: daily.languages, // This will merge with existing data
-          heartbeats: { increment: daily.heartbeats },
-        },
       });
+
+      if (existing) {
+        // Merge existing languages with new languages
+        const existingLanguages = existing.languages as Record<string, number>;
+        const mergedLanguages = { ...existingLanguages };
+        
+        for (const [lang, time] of Object.entries(daily.languages)) {
+          mergedLanguages[lang] = (mergedLanguages[lang] || 0) + time;
+        }
+
+        await analyticsDb.dailyStats.update({
+          where: {
+            userId_date: {
+              userId: daily.userId,
+              date: new Date(daily.date),
+            },
+          },
+          data: {
+            totalTime: { increment: daily.totalTime },
+            languages: mergedLanguages,
+            heartbeats: { increment: daily.heartbeats },
+          },
+        });
+      } else {
+        await analyticsDb.dailyStats.create({
+          data: {
+            userId: daily.userId,
+            date: new Date(daily.date),
+            totalTime: daily.totalTime,
+            languages: daily.languages,
+            heartbeats: daily.heartbeats,
+          },
+        });
+      }
 
       // Update user activity tracking
       await analyticsDb.userActivity.upsert({
@@ -149,26 +180,49 @@ export async function aggregateActivityData() {
 
     // Write weekly aggregations to AnalyticsDB
     for (const [key, weekly] of weeklyGroups) {
-      await analyticsDb.weeklyStats.upsert({
+      // First, try to get existing record to merge languages properly
+      const existing = await analyticsDb.weeklyStats.findUnique({
         where: {
           userId_weekStart: {
             userId: weekly.userId,
             weekStart: new Date(weekly.weekStart),
           },
         },
-        create: {
-          userId: weekly.userId,
-          weekStart: new Date(weekly.weekStart),
-          totalTime: weekly.totalTime,
-          languages: weekly.languages,
-          heartbeats: weekly.heartbeats,
-        },
-        update: {
-          totalTime: { increment: weekly.totalTime },
-          languages: weekly.languages, // This will merge with existing data
-          heartbeats: { increment: weekly.heartbeats },
-        },
       });
+
+      if (existing) {
+        // Merge existing languages with new languages
+        const existingLanguages = existing.languages as Record<string, number>;
+        const mergedLanguages = { ...existingLanguages };
+        
+        for (const [lang, time] of Object.entries(weekly.languages)) {
+          mergedLanguages[lang] = (mergedLanguages[lang] || 0) + time;
+        }
+
+        await analyticsDb.weeklyStats.update({
+          where: {
+            userId_weekStart: {
+              userId: weekly.userId,
+              weekStart: new Date(weekly.weekStart),
+            },
+          },
+          data: {
+            totalTime: { increment: weekly.totalTime },
+            languages: mergedLanguages,
+            heartbeats: { increment: weekly.heartbeats },
+          },
+        });
+      } else {
+        await analyticsDb.weeklyStats.create({
+          data: {
+            userId: weekly.userId,
+            weekStart: new Date(weekly.weekStart),
+            totalTime: weekly.totalTime,
+            languages: weekly.languages,
+            heartbeats: weekly.heartbeats,
+          },
+        });
+      }
     }
 
     // Clean up processed events from IngestDB (optional - for storage management)
@@ -179,6 +233,20 @@ export async function aggregateActivityData() {
           id: {
             in: processedEventIds,
           },
+        },
+      });
+    }
+
+    // Create checkpoint record for this successful aggregation run
+    if (events.length > 0) {
+      const firstEventId = events[0].id;
+      const lastEventId = events[events.length - 1].id;
+      
+      await ingestDb.ingestionCheckpoint.create({
+        data: {
+          watermarkStart: firstEventId,
+          watermarkEnd: lastEventId,
+          recordCount: events.length,
         },
       });
     }
