@@ -39,7 +39,7 @@ export async function aggregateActivityData() {
     });
 
     // Determine the starting point for this batch
-    const startId = latestCheckpoint ? latestCheckpoint.watermarkEnd : null;
+    const startId = latestCheckpoint ? parseInt(latestCheckpoint.watermarkEnd) : null;
     
     // Get all events that haven't been processed yet (using ID-based watermark)
     const events = await ingestDb.activityEvent.findMany({
@@ -239,8 +239,8 @@ export async function aggregateActivityData() {
 
     // Create checkpoint record for this successful aggregation run
     if (events.length > 0) {
-      const firstEventId = events[0].id;
-      const lastEventId = events[events.length - 1].id;
+      const firstEventId = events[0].id.toString();
+      const lastEventId = events[events.length - 1].id.toString();
       
       await ingestDb.ingestionCheckpoint.create({
         data: {
