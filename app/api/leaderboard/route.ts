@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     if (timeframeParam === 'weekly') {
       aggregatedData = await analyticsDb.weeklyStats.findMany({
         where: {
-          weekStart: {
+          updatedAt: {
             gte: timeframe,
           },
         },
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     } else {
       aggregatedData = await analyticsDb.dailyStats.findMany({
         where: {
-          date: {
+          updatedAt: {
             gte: timeframe,
           },
         },
