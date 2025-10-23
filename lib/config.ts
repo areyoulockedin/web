@@ -14,9 +14,6 @@ export const AGGREGATION_CONFIG = {
   
   // Maximum time per event (in minutes)
   MAX_TIME_PER_EVENT: 10,
-  
-  // Whether to clean up processed events from IngestDB
-  CLEANUP_PROCESSED_EVENTS: true,
 } as const;
 
 // Helper function to get cutoff time

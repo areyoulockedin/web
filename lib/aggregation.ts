@@ -225,17 +225,6 @@ export async function aggregateActivityData() {
       }
     }
 
-    // Clean up processed events from IngestDB (optional - for storage management)
-    if (AGGREGATION_CONFIG.CLEANUP_PROCESSED_EVENTS) {
-      const processedEventIds = events.map((e: any) => e.id);
-      await ingestDb.activityEvent.deleteMany({
-        where: {
-          id: {
-            in: processedEventIds,
-          },
-        },
-      });
-    }
 
     // Create checkpoint record for this successful aggregation run
     if (events.length > 0) {
